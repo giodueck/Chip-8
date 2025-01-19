@@ -1,0 +1,14 @@
+[build]
+command=zig build
+cwd=$(VIM_ROOT)
+output=quickfix
+
+[build-and-run]
+command=zig build run
+cwd=$(VIM_ROOT)
+output=quickfix
+
+[test]
+command=zig build test
+cwd=$(VIM_ROOT)
+output=quickfix
