@@ -8,9 +8,7 @@ const c8 = struct {
 //  - store sprites for 0x0-0xF in interpreter memory
 
 pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
-
-    try stdout.print("Hello world\n", .{});
+    // const stdout = std.io.getStdOut().writer();
 
     var chip8: c8.Chip8 = .{};
 
@@ -21,11 +19,6 @@ pub fn main() !void {
     delay_thread.detach();
     sound_thread.detach();
 
-    chip8.delay_mutex.lock();
-    chip8.registers.DT = 60;
-    chip8.delay_mutex.unlock();
-
-    while (chip8.registers.DT > 0) {
-        std.time.sleep(std.time.ns_per_s / 15);
-    }
+    // Entry point for most Chip-8 programs
+    chip8.registers.PC = 0x200;
 }
