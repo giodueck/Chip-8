@@ -3,7 +3,7 @@ const c8 = struct {
     usingnamespace @import("types.zig");
     usingnamespace @import("registers.zig");
 };
-const stderr = std.io.getStdErr().writer();
+// const stderr = std.io.getStdErr().writer();
 
 /// Runs a single instruction: fetch from memory, decode and execute, and update PC accordingly.
 pub fn runInstruction(chip8: *c8.Chip8) void {
@@ -13,8 +13,8 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
         chip8.registers.PC += 1;
     }
 
-    stderr.print("{d}\n", .{chip8.registers.PC}) catch {};
-    stderr.print("{d}\n", .{chip8.memory[chip8.registers.PC]}) catch {};
+    // stderr.print("{d}\n", .{chip8.registers.PC}) catch {};
+    // stderr.print("{d}\n", .{chip8.memory[chip8.registers.PC]}) catch {};
 
     const instr: u16 = @as(u16, chip8.memory[chip8.registers.PC]) << 8 | chip8.memory[chip8.registers.PC + 1];
 
@@ -22,8 +22,8 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
     // instruction nibbles
     const inib: [4]u4 = .{ @truncate((instr >> 12) & 0xF), @truncate((instr >> 8) & 0xF), @truncate((instr >> 4) & 0xF), @truncate(instr & 0xF) };
 
-    stderr.print("{d}\n", .{instr}) catch {};
-    stderr.print("{d}\n", .{inib}) catch {};
+    // stderr.print("{d}\n", .{instr}) catch {};
+    // stderr.print("{d}\n", .{inib}) catch {};
 
     var inc_PC = true;
     switch (inib[0]) {
@@ -170,7 +170,6 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
         0xD => {
             // DRW Vx, Vy, nibble: dispay n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
             const f = drawSprite(chip8, inib[1], inib[2], inib[3]);
-            stderr.print("{d}\n", .{f}) catch {};
             chip8.setVx(0xF, f);
         },
         0xE => {
@@ -246,7 +245,6 @@ fn drawSprite(chip8: *c8.Chip8, x: u4, y: u4, n: u4) u1 {
             // TODO handle sprites going off the sides
             for (0..n) |i| {
                 const sprite_row: u64 = chip8.memory[chip8.registers.I + i];
-                std.io.getStdErr().writer().print("{d}\n", .{sprite_row}) catch {};
                 if ((chip8.screen[py + i] & (sprite_row << (64 - 8 - @as(u6, @truncate(px))))) > 0) collision = true;
                 chip8.screen[py + i] ^= sprite_row << (64 - 8 - @as(u6, @truncate(px)));
             }
