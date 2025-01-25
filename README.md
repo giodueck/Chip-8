@@ -5,7 +5,9 @@ http://devernay.free.fr/hacks/chip8/C8TECH10.HTM is the documentation I used to 
 
 # Progress
 
-Using the test suite at https://github.com/Timendus/chip8-test-suite:
+Run tests with `zig build test` or `zig test src/test.zig`.
+
+The test suite is the one at https://github.com/Timendus/chip8-test-suite. The current progress:
 
 - [x] CHIP-8 splash screen
 - [x] IBM Logo
