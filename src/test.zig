@@ -9,11 +9,11 @@ const expect = std.testing.expect;
 
 test "1-chip8-logo" {
     var program_bin: [0x1000]u8 = [_]u8{0} ** 0x1000;
-    const program_len = try c8.load_rom("roms/1-chip8-logo.ch8", &program_bin);
+    const program_len = try c8.loadRom("roms/1-chip8-logo.ch8", &program_bin);
 
     var chip8: c8.Chip8 = .{};
 
-    c8.set_rom(&chip8, &program_bin, program_len);
+    c8.setRom(&chip8, &program_bin, program_len);
 
     for (0..40) |_| {
         c8.runInstruction(&chip8);
@@ -62,11 +62,11 @@ test "1-chip8-logo" {
 
 test "2-ibm-logo" {
     var program_bin: [0x1000]u8 = [_]u8{0} ** 0x1000;
-    const program_len = try c8.load_rom("roms/2-ibm-logo.ch8", &program_bin);
+    const program_len = try c8.loadRom("roms/2-ibm-logo.ch8", &program_bin);
 
     var chip8: c8.Chip8 = .{};
 
-    c8.set_rom(&chip8, &program_bin, program_len);
+    c8.setRom(&chip8, &program_bin, program_len);
 
     for (0..21) |_| {
         c8.runInstruction(&chip8);
@@ -115,11 +115,11 @@ test "2-ibm-logo" {
 
 test "3-corax+" {
     var program_bin: [0x1000]u8 = [_]u8{0} ** 0x1000;
-    const program_len = try c8.load_rom("roms/3-corax+.ch8", &program_bin);
+    const program_len = try c8.loadRom("roms/3-corax+.ch8", &program_bin);
 
     var chip8: c8.Chip8 = .{};
 
-    c8.set_rom(&chip8, &program_bin, program_len);
+    c8.setRom(&chip8, &program_bin, program_len);
 
     for (0..306) |_| {
         c8.runInstruction(&chip8);

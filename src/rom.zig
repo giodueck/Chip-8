@@ -7,7 +7,7 @@ const c8 = struct {
 
 const stderr = std.io.getStdErr().writer();
 
-pub fn load_rom(program_name: []const u8, program_bin: []u8) !usize {
+pub fn loadRom(program_name: []const u8, program_bin: []u8) !usize {
     const cwd = std.fs.cwd();
     const program_fd = std.fs.Dir.openFile(cwd, program_name, .{});
     var program_len: usize = 0;
@@ -24,7 +24,7 @@ pub fn load_rom(program_name: []const u8, program_bin: []u8) !usize {
     return program_len;
 }
 
-pub fn set_rom(chip8: *c8.Chip8, program: []u8, program_len: usize) void {
+pub fn setRom(chip8: *c8.Chip8, program: []u8, program_len: usize) void {
     // Copy program
     for (program[0x200..(0x200 + program_len)], 0x200..) |b, i| {
         chip8.memory[i] = b;

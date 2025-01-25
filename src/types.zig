@@ -1,4 +1,5 @@
 const std = @import("std");
+const ray = @import("raylib.zig");
 
 pub const register_count = 16;
 pub const memory_size = 0x1000;
@@ -34,23 +35,23 @@ pub const RegisterMap = struct {
     SP: u4 = 0, // stack pointer, up to 16 deep. We'll define it to be at interpreter memory address 0x000-00F
 };
 
-pub const Keypad = enum(u8) {
-    K1 = '1',
-    K2 = '2',
-    K3 = '3',
-    KC = '4',
-    K4 = 'q',
-    K5 = 'w',
-    K6 = 'e',
-    KD = 'r',
-    K7 = 'a',
-    K8 = 's',
-    K9 = 'd',
-    KE = 'f',
-    KA = 'z',
-    K0 = 'x',
-    KB = 'c',
-    KF = 'v',
+pub const KeypadKey = enum(ray.KeyboardKey) {
+    K1 = ray.KEY_ONE,
+    K2 = ray.KEY_TWO,
+    K3 = ray.KEY_THREE,
+    KC = ray.KEY_FOUR,
+    K4 = ray.KEY_Q,
+    K5 = ray.KEY_W,
+    K6 = ray.KEY_E,
+    KD = ray.KEY_R,
+    K7 = ray.KEY_A,
+    K8 = ray.KEY_S,
+    K9 = ray.KEY_D,
+    KE = ray.KEY_F,
+    KA = ray.KEY_Z,
+    K0 = ray.KEY_X,
+    KB = ray.KEY_C,
+    KF = ray.KEY_V,
     _,
 };
 
@@ -59,10 +60,124 @@ pub const GraphicsMode = enum(u1) {
     Mode128x64,
 };
 
+const sprite_zero = .{
+    0b11110000,
+    0b10010000,
+    0b10010000,
+    0b10010000,
+    0b11110000,
+};
+const sprite_one = .{
+    0b00100000,
+    0b01100000,
+    0b00100000,
+    0b00100000,
+    0b01110000,
+};
+const sprite_two = .{
+    0b11110000,
+    0b00010000,
+    0b11110000,
+    0b10000000,
+    0b11110000,
+};
+const sprite_three = .{
+    0b11110000,
+    0b00010000,
+    0b11110000,
+    0b00010000,
+    0b11110000,
+};
+const sprite_four = .{
+    0b10010000,
+    0b10010000,
+    0b11110000,
+    0b00010000,
+    0b00010000,
+};
+const sprite_five = .{
+    0b11110000,
+    0b10000000,
+    0b11110000,
+    0b00010000,
+    0b11110000,
+};
+const sprite_six = .{
+    0b11110000,
+    0b10000000,
+    0b11110000,
+    0b10010000,
+    0b11110000,
+};
+const sprite_seven = .{
+    0b11110000,
+    0b00010000,
+    0b00100000,
+    0b01000000,
+    0b01000000,
+};
+const sprite_eight = .{
+    0b11110000,
+    0b10010000,
+    0b11110000,
+    0b10010000,
+    0b11110000,
+};
+const sprite_nine = .{
+    0b11110000,
+    0b10010000,
+    0b11110000,
+    0b00010000,
+    0b11110000,
+};
+const sprite_ten = .{
+    0b11110000,
+    0b10010000,
+    0b11110000,
+    0b10010000,
+    0b10010000,
+};
+const sprite_eleven = .{
+    0b11100000,
+    0b10010000,
+    0b11100000,
+    0b10010000,
+    0b11100000,
+};
+const sprite_twelve = .{
+    0b11110000,
+    0b10000000,
+    0b10000000,
+    0b10000000,
+    0b11110000,
+};
+const sprite_thirteen = .{
+    0b11100000,
+    0b10010000,
+    0b10010000,
+    0b10010000,
+    0b11100000,
+};
+const sprite_fourteen = .{
+    0b11110000,
+    0b10000000,
+    0b11110000,
+    0b10000000,
+    0b11110000,
+};
+const sprite_fifteen = .{
+    0b11110000,
+    0b10000000,
+    0b11110000,
+    0b10000000,
+    0b10000000,
+};
+const interpreter_memory = [_]u8{0} ** 32 ++ sprite_zero ++ sprite_one ++ sprite_two ++ sprite_three ++ sprite_four ++ sprite_five ++ sprite_six ++ sprite_seven ++ sprite_eight ++ sprite_nine ++ sprite_ten ++ sprite_eleven ++ sprite_twelve ++ sprite_thirteen ++ sprite_fourteen ++ sprite_fifteen;
+
 // State of the system
 pub const Chip8 = struct {
     registers: RegisterMap = .{},
-    memory: [memory_size]u8 = [_]u8{0} ** memory_size,
+    memory: [memory_size]u8 = interpreter_memory ++ [_]u8{0} ** (memory_size - interpreter_memory.len),
     screen: [screen_height]u64 = [_]u64{0} ** screen_height,
     screen2: [screen_height_2]u128 = [_]u128{0} ** screen_height_2,
     active_graphics_mode: GraphicsMode = GraphicsMode.Mode64x32,
@@ -70,6 +185,10 @@ pub const Chip8 = struct {
     // Only one thread may modify a value at a time
     delay_mutex: std.Thread.Mutex = .{},
     sound_mutex: std.Thread.Mutex = .{},
+
+    keypad: [16]bool = [_]bool{false} ** 16,
+
+    freq: u32 = 500,
 
     // Helper functions
     pub fn getVx(self: anytype, x: u4) u8 {
@@ -148,4 +267,8 @@ pub const Chip8 = struct {
 
 pub const Chip8Error = enum {
     Chip8MutexLocked,
+};
+
+pub const Interrupt = error{
+    Vblank,
 };

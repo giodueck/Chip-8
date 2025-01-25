@@ -10,10 +10,53 @@ const ray = @import("raylib.zig");
 const stderr = std.io.getStdErr().writer();
 
 /// Print the display in binary to stderr
-fn print_display(chip8: c8.Chip8) !void {
+fn printDisplay(chip8: c8.Chip8) !void {
     for (0..c8.screen_height) |j| {
         try stderr.print("{b:0>64}\n", .{chip8.screen[j]});
     }
+}
+
+/// Run a single frame and however many instructions fit given the accumulated elapsed time t
+/// Takes care of inputs and CPU cycles
+/// Returns a new value for t
+pub fn runFrame(chip8: *c8.Chip8, t: f32) f32 {
+    var time_acc = t;
+
+    // Inputs
+    // Keypad
+    chip8.keypad[0x0] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K0))) true else false;
+    chip8.keypad[0x1] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K1))) true else false;
+    chip8.keypad[0x2] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K2))) true else false;
+    chip8.keypad[0x3] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K3))) true else false;
+    chip8.keypad[0x4] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K4))) true else false;
+    chip8.keypad[0x5] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K5))) true else false;
+    chip8.keypad[0x6] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K6))) true else false;
+    chip8.keypad[0x7] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K7))) true else false;
+    chip8.keypad[0x8] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K8))) true else false;
+    chip8.keypad[0x9] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.K9))) true else false;
+    chip8.keypad[0xA] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.KA))) true else false;
+    chip8.keypad[0xB] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.KB))) true else false;
+    chip8.keypad[0xC] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.KC))) true else false;
+    chip8.keypad[0xD] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.KD))) true else false;
+    chip8.keypad[0xE] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.KE))) true else false;
+    chip8.keypad[0xF] = if (ray.IsKeyDown(@intFromEnum(c8.KeypadKey.KF))) true else false;
+
+    // Run instructions at the desired frequency
+    while (time_acc > 1.0 / @as(f32, @floatFromInt(chip8.freq))) {
+        time_acc -= 1.0 / @as(f32, @floatFromInt(chip8.freq));
+
+        c8.runInstruction(chip8) catch |interrupt| {
+            switch (interrupt) {
+                c8.Interrupt.Vblank => {
+                    time_acc = 0;
+                    continue;
+                },
+            }
+        };
+        // std.debug.print("{x:0>4}\r", .{@as(u16, chip8.memory[chip8.registers.PC]) << 8 | chip8.memory[chip8.registers.PC + 1]});
+    }
+
+    return time_acc;
 }
 
 pub fn main() !void {
@@ -25,7 +68,7 @@ pub fn main() !void {
     const screenwidth: i32 = 64 * pixel_size;
     const screenheight: i32 = 32 * pixel_size;
     const fps: u32 = 60;
-    const target_freq: u32 = 60;
+    const target_freq: u32 = 1200;
 
     ray.InitWindow(screenwidth, screenheight, "Chip-8 emulator");
     defer ray.CloseWindow();
@@ -54,11 +97,12 @@ pub fn main() !void {
     }
 
     // Try to open the file
-    const program_len = try c8.load_rom(program_name, &program_bin);
+    const program_len = try c8.loadRom(program_name, &program_bin);
 
     var chip8: c8.Chip8 = .{};
+    chip8.freq = target_freq;
 
-    c8.set_rom(&chip8, &program_bin, program_len);
+    c8.setRom(&chip8, &program_bin, program_len);
 
     // Timers must run at 60Hz, while CPU frequency is unspecified.
     var delay_thread = try std.Thread.spawn(.{}, c8.delayTimer, .{&chip8});
@@ -67,26 +111,16 @@ pub fn main() !void {
     delay_thread.detach();
     sound_thread.detach();
 
-    // TODO
-    // Initialize interpreter memory:
-    //  - [x] load ROM
-    //  - [ ] store sprites for 0x0-0xF in interpreter memory
-
     var time_acc: f32 = 0;
     while (!ray.WindowShouldClose()) {
         time_acc += ray.GetFrameTime();
 
-        // Inputs
+        // Input and CPU cycles
+        time_acc = runFrame(&chip8, time_acc);
+
+        // Debug
         if (ray.IsKeyPressed(ray.KEY_P)) {
-            try print_display(chip8);
-        }
-
-        // Run instructions at the desired frequency
-        while (time_acc > 1.0 / @as(f32, target_freq)) {
-            time_acc -= 1.0 / @as(f32, target_freq);
-
-            c8.runInstruction(&chip8);
-            std.debug.print("{x:0>4}\r", .{@as(u16, chip8.memory[chip8.registers.PC]) << 8 | chip8.memory[chip8.registers.PC + 1]});
+            try printDisplay(chip8);
         }
 
         // Drawing
@@ -96,7 +130,7 @@ pub fn main() !void {
 
             ray.ClearBackground(ray.DARKGRAY);
 
-            for (chip8.screen, @as(i32, 0)..) |col, i| {
+            for (chip8.screen, 0..) |col, i| {
                 for (0..@bitSizeOf(@TypeOf(col))) |row| {
                     if (col & (@as(u64, 1) << (@bitSizeOf(@TypeOf(col)) - 1 - @as(u6, @intCast(row)))) != 0) {
                         ray.DrawRectangle(@as(c_int, @intCast(row)) * pixel_size, @as(c_int, @intCast(i)) * pixel_size, pixel_size, pixel_size, ray.LIGHTGRAY);

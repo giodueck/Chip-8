@@ -6,7 +6,8 @@ const c8 = struct {
 // const stderr = std.io.getStdErr().writer();
 
 /// Runs a single instruction: fetch from memory, decode and execute, and update PC accordingly.
-pub fn runInstruction(chip8: *c8.Chip8) void {
+/// The only errors are interrupts
+pub fn runInstruction(chip8: *c8.Chip8) c8.Interrupt!void {
     // Fetch
     if (chip8.registers.PC & 1 != 0) {
         // This is an invalid instruction location, assume padding is wrong and increment to make PC even
@@ -26,6 +27,7 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
     // stderr.print("{d}\n", .{inib}) catch {};
 
     var inc_PC = true;
+    var int: ?c8.Interrupt = null;
     switch (inib[0]) {
         0x0 => {
             if (instr == 0x00E0) {
@@ -100,18 +102,21 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
                     const vx = chip8.getVx(inib[1]);
                     const vy = chip8.getVx(inib[2]);
                     chip8.setVx(inib[1], vx | vy);
+                    chip8.setVx(0xF, 0);
                 },
                 0x2 => {
                     // AND Vx, Vy: set Vx = Vx AND Vy
                     const vx = chip8.getVx(inib[1]);
                     const vy = chip8.getVx(inib[2]);
                     chip8.setVx(inib[1], vx & vy);
+                    chip8.setVx(0xF, 0);
                 },
                 0x3 => {
                     // XOR Vx, Vy: set Vx = Vx XOR Vy
                     const vx = chip8.getVx(inib[1]);
                     const vy = chip8.getVx(inib[2]);
                     chip8.setVx(inib[1], vx ^ vy);
+                    chip8.setVx(0xF, 0);
                 },
                 0x4 => {
                     // ADD Vx, Vy: set Vx = Vx + Vy, set VF = carry
@@ -125,15 +130,15 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
                     // SUB Vx, Vy: set Vx = Vx - Vy, set VF = NOT borrow
                     const vx = chip8.getVx(inib[1]);
                     const vy = chip8.getVx(inib[2]);
-                    const sub_res = @addWithOverflow(vx, (~vy + 1));
+                    const sub_res = @subWithOverflow(vx, vy);
                     chip8.setVx(inib[1], sub_res.@"0");
                     chip8.setVx(0xF, sub_res.@"1");
                 },
                 0x6 => {
                     // SHR Vx {, Vy}: set Vx = Vx >> 1, set VF = least signifficant bit in Vx before shift
-                    const vx = chip8.getVx(inib[1]);
-                    const f: u1 = @truncate(vx & 1);
-                    chip8.setVx(inib[1], vx >> 1);
+                    const vy = chip8.getVx(inib[2]);
+                    const f: u1 = @truncate(vy & 1);
+                    chip8.setVx(inib[1], vy >> 1);
                     chip8.setVx(0xF, f);
                 },
                 0x7 => {
@@ -145,10 +150,10 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
                     chip8.setVx(0xF, sub_res.@"1");
                 },
                 0xE => {
-                    // SHL Vx {, Vy}: set Vx = Vx << 1, set VF = most signifficant bit in Vx before shift
-                    const vx = chip8.getVx(inib[1]);
-                    const f: u1 = @truncate((vx >> 7) & 1);
-                    chip8.setVx(inib[1], vx << 1);
+                    // SHL Vx , Vy: set Vx = Vy << 1, set VF = most signifficant bit in Vx before shift
+                    const vy = chip8.getVx(inib[2]);
+                    const f: u1 = @truncate((vy >> 7) & 1);
+                    chip8.setVx(inib[1], vy << 1);
                     chip8.setVx(0xF, f);
                 },
                 else => {
@@ -186,12 +191,19 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
             // DRW Vx, Vy, nibble: dispay n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
             const f = drawSprite(chip8, inib[1], inib[2], inib[3]);
             chip8.setVx(0xF, f);
+            int = c8.Interrupt.Vblank;
         },
         0xE => {
             if ((instr & 0xFF) == 0x9E) {
                 // SKP Vx: skip next instruction if key with the value of Vx is pressed
+                if (chip8.keypad[chip8.getVx(inib[1])]) {
+                    chip8.registers.PC +%= 2;
+                }
             } else if ((instr & 0xFF) == 0xA1) {
                 // SKNP Vx: skip next instruction if key with the value of Vx is not pressed
+                if (!chip8.keypad[chip8.getVx(inib[1])]) {
+                    chip8.registers.PC +%= 2;
+                }
             }
         },
         0xF => {
@@ -207,6 +219,16 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
                 },
                 0x0A => {
                     // LD Vx, K: wait for a key press, store the value of the key in Vx
+                    for (chip8.keypad, 0..) |k, i_| {
+                        const i: u8 = @intCast(i_);
+                        if (k) {
+                            chip8.setVx(inib[1], i);
+                            break;
+                        }
+                    } else {
+                        // repeat this instruction
+                        inc_PC = false;
+                    }
                 },
                 0x15 => {
                     // LD DT, Vx: set delay timer = Vx
@@ -232,6 +254,9 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
                 },
                 0x29 => {
                     // LD F, Vx: set I = location of sprite for digit Vx
+                    // Sprites located at 32 + sprite_i * 5 (stack = 32B, sprite = 5B)
+                    const v: u12 = chip8.getVx(inib[1]) & 0xF;
+                    chip8.registers.I = 32 + v * 5;
                 },
                 0x33 => {
                     // LD B, Vx: store BCD representation of Vx in memory locations I, I+1, and I+2
@@ -244,14 +269,16 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
                     // LD [I], Vx: store registers V0 through Vx in memory starting at location I
                     for (0..inib[1] + 1) |_x| {
                         const x = @as(u4, @truncate(_x));
-                        chip8.memory[chip8.registers.I +| x] = chip8.getVx(x);
+                        chip8.memory[chip8.registers.I] = chip8.getVx(x);
+                        chip8.registers.I +%= 1;
                     }
                 },
                 0x65 => {
                     // LD Vx, [I]: load registers V0 through Vx from memory starting at location I
                     for (0..inib[1] + 1) |_x| {
                         const x = @as(u4, @truncate(_x));
-                        chip8.setVx(x, chip8.memory[chip8.registers.I +| x]);
+                        chip8.setVx(x, chip8.memory[chip8.registers.I]);
+                        chip8.registers.I +%= 1;
                     }
                 },
                 else => {
@@ -263,6 +290,8 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
 
     // Post-execution
     if (inc_PC) chip8.registers.PC +%= 2;
+
+    if (int) |interrupt| return interrupt;
 }
 
 fn clearScreen(chip8: *c8.Chip8) void {
@@ -284,22 +313,27 @@ fn clearScreen(chip8: *c8.Chip8) void {
 /// Returns 1 if there was a collision
 fn drawSprite(chip8: *c8.Chip8, x: u4, y: u4, n: u4) u1 {
     var collision = false;
-    const px = chip8.getVx(x);
-    const py = chip8.getVx(y);
+    const px = chip8.getVx(x) % 0x40;
+    const py = chip8.getVx(y) % 0x20;
     switch (chip8.active_graphics_mode) {
         c8.GraphicsMode.Mode64x32 => {
-            // TODO handle sprites going off the sides
             for (0..n) |i| {
+                if (py + i >= chip8.screen.len) break;
+
                 const sprite_row: u64 = chip8.memory[chip8.registers.I + i];
-                const shifted = @as(u64, @intCast(std.math.shl(i65, sprite_row, @as(i65, 64 - 8) - px)));
+                const shifted = @as(u64, @intCast(std.math.shl(i65, sprite_row, 64 - 8 - @as(i65, px))));
+
                 if ((chip8.screen[py + i] & shifted) > 0) collision = true;
                 chip8.screen[py + i] ^= shifted;
             }
         },
         c8.GraphicsMode.Mode128x64 => {
             for (0..n) |i| {
+                if (py + i >= chip8.screen.len) break;
+
                 const sprite_row: u128 = chip8.memory[chip8.registers.I + i];
                 const shifted = @as(u128, @intCast(std.math.shl(i129, sprite_row, @as(i129, 128 - 8) - px)));
+
                 if ((chip8.screen2[py + i] & shifted) > 0) collision = true;
                 chip8.screen2[py + i] ^= shifted;
             }

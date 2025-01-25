@@ -11,9 +11,9 @@ The test suite is the one at https://github.com/Timendus/chip8-test-suite. The c
 
 - [x] CHIP-8 splash screen
 - [x] IBM Logo
-- [ ] Corax+ opcode test
+- [x] Corax+ opcode test
 - [ ] Flags test
-- [ ] Quirks test
+- [x] Quirks test
 - [ ] Keypad test
 - [ ] Beep test
 - [ ] Scrolling test
