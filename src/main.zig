@@ -5,6 +5,7 @@ const c8 = struct {
     usingnamespace @import("cpu.zig");
     usingnamespace @import("rom.zig");
 };
+const ray = @import("raylib.zig");
 
 const stderr = std.io.getStdErr().writer();
 
@@ -12,6 +13,19 @@ pub fn main() !void {
     const alloc = std.heap.page_allocator;
     // const stdout = std.io.getStdOut().writer();
 
+    // Raylib init
+    const pixel_size: i32 = 8;
+    const screenwidth: i32 = 64 * pixel_size;
+    const screenheight: i32 = 32 * pixel_size;
+    const fps: u32 = 60;
+    const target_freq: u32 = 60;
+
+    ray.InitWindow(screenwidth, screenheight, "Chip-8 emulator");
+    defer ray.CloseWindow();
+
+    ray.SetTargetFPS(fps);
+
+    // Chip8 init
     var program_name: []u8 = "";
     var program_bin: [0x1000]u8 = [_]u8{0} ** 0x1000;
 
@@ -35,17 +49,6 @@ pub fn main() !void {
     // Try to open the file
     const program_len = try c8.load_rom(program_name, &program_bin);
 
-    // For debugging: output program binary
-    // for (program_bin[0x200..(0x200 + program_len)], 0..) |b, i| {
-    //     if (i % 16 == 0 and i != 0) {
-    //         try stderr.writeAll("\n");
-    //     } else if (i % 2 == 0 and i != 0) {
-    //         try stderr.writeAll(" ");
-    //     }
-    //     try stderr.print("{x:0^2}", .{b});
-    // }
-    // try stderr.writeAll("\n");
-
     var chip8: c8.Chip8 = .{};
 
     c8.set_rom(&chip8, &program_bin, program_len);
@@ -59,15 +62,35 @@ pub fn main() !void {
 
     // TODO
     // Initialize interpreter memory:
-    //  - store sprites for 0x0-0xF in interpreter memory
+    //  - [x] load ROM
+    //  - [ ] store sprites for 0x0-0xF in interpreter memory
 
-    for (0..50) |i| {
-        try stderr.print("{d}: PC = {x:0^3} => {x:0>2}{x:0>2}; Reg: {}\n", .{ i, chip8.registers.PC, chip8.memory[chip8.registers.PC], chip8.memory[chip8.registers.PC + 1], chip8.registers });
-        c8.runInstruction(&chip8);
+    var time_acc: f32 = 0;
+    while (!ray.WindowShouldClose()) {
+        time_acc += ray.GetFrameTime();
 
-        // print display
-        for (0..c8.screen_height) |j| {
-            try stderr.print("{b:0>64}\n", .{chip8.screen[j]});
+        // Run instructions at the desired frequency
+        while (time_acc > 1.0 / @as(f32, target_freq)) {
+            time_acc -= 1.0 / @as(f32, target_freq);
+
+            c8.runInstruction(&chip8);
+            // std.debug.print("{x:0>4}\r", .{chip8.registers.PC});
+        }
+
+        // Drawing
+        {
+            ray.BeginDrawing();
+            defer ray.EndDrawing();
+
+            ray.ClearBackground(ray.DARKGRAY);
+
+            for (chip8.screen, @as(i32, 0)..) |col, i| {
+                for (0..@bitSizeOf(@TypeOf(col))) |row| {
+                    if (col & (@as(u64, 1) << (@bitSizeOf(@TypeOf(col)) - 1 - @as(u6, @intCast(row)))) != 0) {
+                        ray.DrawRectangle(@as(c_int, @intCast(row)) * pixel_size, @as(c_int, @intCast(i)) * pixel_size, pixel_size, pixel_size, ray.LIGHTGRAY);
+                    }
+                }
+            }
         }
     }
 }
