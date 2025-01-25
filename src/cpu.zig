@@ -70,9 +70,11 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
         0x5 => {
             // SE Vx, Vy: skip next instruction if Vx = Vy
             // 5xy0
-            if (chip8.getVx(inib[1]) == chip8.getVx(inib[2])) {
-                chip8.registers.PC +%= 2;
-            }
+            if (inib[3] == 0x0) {
+                if (chip8.getVx(inib[1]) == chip8.getVx(inib[2])) {
+                    chip8.registers.PC +%= 2;
+                }
+            } // else NOOP: illegal instruction
         },
         0x6 => {
             // LD Vx, byte: set Vx = byte
@@ -156,6 +158,11 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
         },
         0x9 => {
             // SNE Vx, Vy: skip next instruction if Vx != Vy
+            if (inib[3] == 0x0) {
+                if (chip8.getVx(inib[1]) != chip8.getVx(inib[2])) {
+                    chip8.registers.PC +%= 2;
+                }
+            } // else NOOP: illegal instruction
         },
         0xA => {
             // LD I, addr: set I = addr
@@ -163,9 +170,17 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
         },
         0xB => {
             // JP V0, addr: jump to addr + V0
+            chip8.registers.PC = chip8.registers.V0 + @as(u12, @intCast(instr & 0xFFF));
+            inc_PC = false;
         },
         0xC => {
             // RND Vx, byte: set Vx = random byte AND byte
+            // Cxkk
+            var rnd: [1]u8 = .{0};
+            std.posix.getrandom(&rnd) catch {
+                rnd[0] = @as(u8, @truncate(chip8.registers.PC)) *% 0x65;
+            };
+            chip8.setVx(inib[1], rnd[0] & @as(u8, @intCast(instr & 0xFF)));
         },
         0xD => {
             // DRW Vx, Vy, nibble: dispay n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
@@ -183,30 +198,61 @@ pub fn runInstruction(chip8: *c8.Chip8) void {
             switch (instr & 0xFF) {
                 0x07 => {
                     // LD Vx, DT: set Vx = delay timer value
+                    {
+                        chip8.delay_mutex.lock();
+                        defer chip8.delay_mutex.unlock();
+
+                        chip8.setVx(inib[1], chip8.registers.DT);
+                    }
                 },
                 0x0A => {
                     // LD Vx, K: wait for a key press, store the value of the key in Vx
                 },
                 0x15 => {
                     // LD DT, Vx: set delay timer = Vx
+                    {
+                        chip8.delay_mutex.lock();
+                        defer chip8.delay_mutex.unlock();
+
+                        chip8.registers.DT = chip8.getVx(inib[1]);
+                    }
                 },
                 0x18 => {
                     // LD ST, Vx: set sound timer = Vx
+                    {
+                        chip8.sound_mutex.lock();
+                        defer chip8.sound_mutex.unlock();
+
+                        chip8.registers.ST = chip8.getVx(inib[1]);
+                    }
                 },
                 0x1E => {
                     // ADD I, Vx: set I = I + Vx
+                    chip8.registers.I +%= chip8.getVx(inib[1]);
                 },
                 0x29 => {
                     // LD F, Vx: set I = location of sprite for digit Vx
                 },
                 0x33 => {
                     // LD B, Vx: store BCD representation of Vx in memory locations I, I+1, and I+2
+                    const v = chip8.getVx(inib[1]);
+                    chip8.memory[chip8.registers.I] = v / 100;
+                    chip8.memory[chip8.registers.I +| 1] = (v % 100) / 10;
+                    chip8.memory[chip8.registers.I +| 2] = v % 10;
                 },
                 0x55 => {
                     // LD [I], Vx: store registers V0 through Vx in memory starting at location I
+                    for (0..inib[1] + 1) |_x| {
+                        const x = @as(u4, @truncate(_x));
+                        chip8.memory[chip8.registers.I +| x] = chip8.getVx(x);
+                    }
                 },
                 0x65 => {
                     // LD Vx, [I]: load registers V0 through Vx from memory starting at location I
+                    for (0..inib[1] + 1) |_x| {
+                        const x = @as(u4, @truncate(_x));
+                        chip8.setVx(x, chip8.memory[chip8.registers.I +| x]);
+                    }
                 },
                 else => {
                     // NOOP: illegal instruction
@@ -245,15 +291,17 @@ fn drawSprite(chip8: *c8.Chip8, x: u4, y: u4, n: u4) u1 {
             // TODO handle sprites going off the sides
             for (0..n) |i| {
                 const sprite_row: u64 = chip8.memory[chip8.registers.I + i];
-                if ((chip8.screen[py + i] & (sprite_row << (64 - 8 - @as(u6, @truncate(px))))) > 0) collision = true;
-                chip8.screen[py + i] ^= sprite_row << (64 - 8 - @as(u6, @truncate(px)));
+                const shifted = @as(u64, @intCast(std.math.shl(i65, sprite_row, @as(i65, 64 - 8) - px)));
+                if ((chip8.screen[py + i] & shifted) > 0) collision = true;
+                chip8.screen[py + i] ^= shifted;
             }
         },
         c8.GraphicsMode.Mode128x64 => {
             for (0..n) |i| {
                 const sprite_row: u128 = chip8.memory[chip8.registers.I + i];
-                if ((chip8.screen2[py + i] & (sprite_row << (128 - 8 - @as(u7, @truncate(px))))) > 0) collision = true;
-                chip8.screen2[py + i] ^= sprite_row << (128 - 8 - @as(u7, @truncate(px)));
+                const shifted = @as(u128, @intCast(std.math.shl(i129, sprite_row, @as(i129, 128 - 8) - px)));
+                if ((chip8.screen2[py + i] & shifted) > 0) collision = true;
+                chip8.screen2[py + i] ^= shifted;
             }
         },
     }

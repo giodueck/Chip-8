@@ -9,6 +9,13 @@ const ray = @import("raylib.zig");
 
 const stderr = std.io.getStdErr().writer();
 
+/// Print the display in binary to stderr
+fn print_display(chip8: c8.Chip8) !void {
+    for (0..c8.screen_height) |j| {
+        try stderr.print("{b:0>64}\n", .{chip8.screen[j]});
+    }
+}
+
 pub fn main() !void {
     const alloc = std.heap.page_allocator;
     // const stdout = std.io.getStdOut().writer();
@@ -69,12 +76,17 @@ pub fn main() !void {
     while (!ray.WindowShouldClose()) {
         time_acc += ray.GetFrameTime();
 
+        // Inputs
+        if (ray.IsKeyPressed(ray.KEY_P)) {
+            try print_display(chip8);
+        }
+
         // Run instructions at the desired frequency
         while (time_acc > 1.0 / @as(f32, target_freq)) {
             time_acc -= 1.0 / @as(f32, target_freq);
 
             c8.runInstruction(&chip8);
-            // std.debug.print("{x:0>4}\r", .{chip8.registers.PC});
+            std.debug.print("{x:0>4}\r", .{@as(u16, chip8.memory[chip8.registers.PC]) << 8 | chip8.memory[chip8.registers.PC + 1]});
         }
 
         // Drawing
