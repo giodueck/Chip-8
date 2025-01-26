@@ -132,7 +132,7 @@ pub fn runInstruction(chip8: *c8.Chip8) c8.Interrupt!void {
                     const vy = chip8.getVx(inib[2]);
                     const sub_res = @subWithOverflow(vx, vy);
                     chip8.setVx(inib[1], sub_res.@"0");
-                    chip8.setVx(0xF, sub_res.@"1");
+                    chip8.setVx(0xF, 1 - sub_res.@"1");
                 },
                 0x6 => {
                     // SHR Vx {, Vy}: set Vx = Vx >> 1, set VF = least signifficant bit in Vx before shift
@@ -145,9 +145,9 @@ pub fn runInstruction(chip8: *c8.Chip8) c8.Interrupt!void {
                     // SUBN Vx, Vy: set Vx = Vy - Vx, set VF = NOT borrow
                     const vx = chip8.getVx(inib[1]);
                     const vy = chip8.getVx(inib[2]);
-                    const sub_res = @addWithOverflow(vy, (~vx + 1));
+                    const sub_res = @subWithOverflow(vy, vx);
                     chip8.setVx(inib[1], sub_res.@"0");
-                    chip8.setVx(0xF, sub_res.@"1");
+                    chip8.setVx(0xF, 1 - sub_res.@"1");
                 },
                 0xE => {
                     // SHL Vx , Vy: set Vx = Vy << 1, set VF = most signifficant bit in Vx before shift

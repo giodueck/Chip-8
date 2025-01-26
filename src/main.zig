@@ -130,10 +130,10 @@ pub fn main() !void {
 
             ray.ClearBackground(ray.DARKGRAY);
 
-            for (chip8.screen, 0..) |col, i| {
-                for (0..@bitSizeOf(@TypeOf(col))) |row| {
-                    if (col & (@as(u64, 1) << (@bitSizeOf(@TypeOf(col)) - 1 - @as(u6, @intCast(row)))) != 0) {
-                        ray.DrawRectangle(@as(c_int, @intCast(row)) * pixel_size, @as(c_int, @intCast(i)) * pixel_size, pixel_size, pixel_size, ray.LIGHTGRAY);
+            for (chip8.screen, 0..32) |row, i| {
+                for (0..64) |col| {
+                    if (row & (@as(u64, 1) << (@bitSizeOf(@TypeOf(row)) - 1 - @as(u6, @intCast(col)))) != 0) {
+                        ray.DrawRectangle(@as(c_int, @intCast(col)) * pixel_size, @as(c_int, @intCast(i)) * pixel_size, pixel_size, pixel_size, ray.LIGHTGRAY);
                     }
                 }
             }
