@@ -219,15 +219,31 @@ pub fn runInstruction(chip8: *c8.Chip8) c8.Interrupt!void {
                 },
                 0x0A => {
                     // LD Vx, K: wait for a key press, store the value of the key in Vx
-                    for (chip8.keypad, 0..) |k, i_| {
-                        const i: u8 = @intCast(i_);
-                        if (k) {
-                            chip8.setVx(inib[1], i);
-                            break;
+                    const key = struct {
+                        // stores the index of the key being listened for.
+                        // if -1, no this instruction is not active
+                        var index: i32 = -1;
+                    };
+                    // Listen for key
+                    if (key.index < 0) {
+                        for (chip8.keypad, 0..) |k, i_| {
+                            const i: u8 = @intCast(i_);
+                            if (k) {
+                                chip8.setVx(inib[1], i);
+                                key.index = i;
+                                break;
+                            }
                         }
-                    } else {
-                        // repeat this instruction
+                        // repeat this instruction: either we wait for a key or for its release
                         inc_PC = false;
+                    }
+                    // Wait for release to continue
+                    else {
+                        if (chip8.keypad[@as(u4, @intCast(key.index))]) {
+                            inc_PC = false;
+                        } else {
+                            key.index = -1;
+                        }
                     }
                 },
                 0x15 => {
@@ -267,7 +283,7 @@ pub fn runInstruction(chip8: *c8.Chip8) c8.Interrupt!void {
                 },
                 0x55 => {
                     // LD [I], Vx: store registers V0 through Vx in memory starting at location I
-                    for (0..inib[1] + 1) |_x| {
+                    for (0..@as(u8, inib[1]) + 1) |_x| {
                         const x = @as(u4, @truncate(_x));
                         chip8.memory[chip8.registers.I] = chip8.getVx(x);
                         chip8.registers.I +%= 1;
@@ -275,7 +291,7 @@ pub fn runInstruction(chip8: *c8.Chip8) c8.Interrupt!void {
                 },
                 0x65 => {
                     // LD Vx, [I]: load registers V0 through Vx from memory starting at location I
-                    for (0..inib[1] + 1) |_x| {
+                    for (0..@as(u8, inib[1]) + 1) |_x| {
                         const x = @as(u4, @truncate(_x));
                         chip8.setVx(x, chip8.memory[chip8.registers.I]);
                         chip8.registers.I +%= 1;
