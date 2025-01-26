@@ -6,6 +6,7 @@ const c8 = struct {
     usingnamespace @import("rom.zig");
 };
 const ray = @import("raylib.zig");
+const audio = @import("audio.zig");
 
 const stderr = std.io.getStdErr().writer();
 
@@ -73,6 +74,9 @@ pub fn main() !void {
     ray.InitWindow(screenwidth, screenheight, "Chip-8 emulator");
     defer ray.CloseWindow();
 
+    const audio_stream = audio.initAudio();
+    defer audio.deinitAudio(audio_stream);
+
     ray.SetTargetFPS(fps);
 
     // Chip8 init
@@ -106,7 +110,7 @@ pub fn main() !void {
 
     // Timers must run at 60Hz, while CPU frequency is unspecified.
     var delay_thread = try std.Thread.spawn(.{}, c8.delayTimer, .{&chip8});
-    var sound_thread = try std.Thread.spawn(.{}, c8.soundTimer, .{&chip8});
+    var sound_thread = try std.Thread.spawn(.{}, c8.soundTimer, .{ &chip8, audio_stream });
     // The threads should keep running indefinitely, let them stop when main exits
     delay_thread.detach();
     sound_thread.detach();

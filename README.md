@@ -15,7 +15,7 @@ The test suite is the one at https://github.com/Timendus/chip8-test-suite. The c
 - [x] Flags test
 - [x] Quirks test
 - [x] Keypad test
-- [ ] Beep test
+- [x] Beep test
 
 In case I implement Super Chip-8:
 - [ ] Quirks test
